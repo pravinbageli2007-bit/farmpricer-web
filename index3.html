@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FarmPricer – Pesticide Price Comparison</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Razorpay -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #e8f5e9;
+  padding: 20px;
+}
+h1 { color: #2e7d32; }
+.panel { display: none; }
+.card {
+  background: #fff;
+  padding: 15px;
+  margin: 10px 0;
+  border-radius: 10px;
+}
+input {
+  padding: 8px;
+  width: 100%;
+}
+button {
+  padding: 10px;
+  background: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  width: 100%;
+}
+.secondary {
+  background: #1565c0;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🌾 FarmPricer</h1>
+
+<!-- LOGIN / SIGNUP -->
+<div id="loginPanel">
+  <h2>Login / Create Account</h2>
+
+  <input id="emailInput" placeholder="Email"><br><br>
+  <input id="passwordInput" type="password" placeholder="Password"><br><br>
+
+  <button onclick="login()">Login</button><br><br>
+  <button class="secondary" onclick="signup()">Create New Account</button>
+
+  <p style="font-size:14px;margin-top:10px">
+    Use email containing <b>seller</b> for Seller account
+  </p>
+</div>
+
+<!-- FARMER DASHBOARD -->
+<div id="farmerPanel" class="panel">
+  <h2>👨‍🌾 Farmer Dashboard</h2>
+  <div id="productList"></div>
+</div>
+
+<!-- SELLER DASHBOARD -->
+<div id="sellerPanel" class="panel">
+  <h2>🏪 Seller Dashboard</h2>
+
+  <input id="productName" placeholder="Product Name"><br><br>
+  <input id="productPrice" placeholder="Price"><br><br>
+  <button onclick="addProduct()">Add Product</button>
+</div>
+
+<!-- FIREBASE + LOGIC -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+/* 🔑 FIREBASE CONFIG */
+const firebaseConfig = {
+  apiKey: "YOUR_FIREBASE_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let currentUser = null;
+
+/* LOGIN */
+window.login = async () => {
+  try {
+    const email = emailInput.value;
+    const password = passwordInput.value;
+
+    await signInWithEmailAndPassword(auth, email, password);
+    afterAuth(email);
+  } catch {
+    alert("Login Failed");
+  }
+};
+
+/* SIGN UP */
+window.signup = async () => {
+  try {
+    const email = emailInput.value;
+    const password = passwordInput.value;
+
+    await createUserWithEmailAndPassword(auth, email, password);
+    alert("Account Created!");
+    afterAuth(email);
+  } catch (e) {
+    alert(e.message);
+  }
+};
+
+/* ROLE HANDLER */
+function afterAuth(email) {
+  currentUser = email;
+  loginPanel.style.display = "none";
+
+  if (email.includes("seller")) {
+    sellerPanel.style.display = "block";
+  } else {
+    farmerPanel.style.display = "block";
+    loadProducts();
+  }
+}
+
+/* LOAD PRODUCTS */
+async function loadProducts() {
+  productList.innerHTML = "";
+  const snap = await getDocs(collection(db, "products"));
+
+  snap.forEach(doc => {
+    const p = doc.data();
+    productList.innerHTML += `
+      <div class="card">
+        <h3>${p.name}</h3>
+        <p>₹${p.price}</p>
+        <button onclick="pay('${p.name}', ${p.price})">Buy</button>
+      </div>
+    `;
+  });
+}
+
+/* PAYMENT */
+window.pay = (name, price) => {
+  const options = {
+    key: "YOUR_RAZORPAY_KEY",
+    amount: price * 100,
+    currency: "INR",
+    name: "FarmPricer",
+    description: name,
+    handler: async function (res) {
+      await addDoc(collection(db, "orders"), {
+        product: name,
+        price,
+        buyer: currentUser,
+        paymentId: res.razorpay_payment_id,
+        status: "PAID"
+      });
+      alert("Payment Successful");
+    }
+  };
+  new Razorpay(options).open();
+};
+
+/* SELLER ADD PRODUCT */
+window.addProduct = async () => {
+  await addDoc(collection(db, "products"), {
+    name: productName.value,
+    price: Number(productPrice.value),
+    seller: currentUser
+  });
+  alert("Product Added");
+};
+</script>
+
+</body>
+</html>
